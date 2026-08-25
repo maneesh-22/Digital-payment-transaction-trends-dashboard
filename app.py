@@ -3,18 +3,21 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 
-# ---------------------------------------------------------
-# PAGE CONFIGURATION
-# ---------------------------------------------------------
+# ============================================================
+# DIGITAL PAYMENT TRANSACTION TRENDS DASHBOARD
+# ============================================================
+
 st.set_page_config(
     page_title="Digital Payment Transaction Trends Dashboard",
     page_icon="💳",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ---------------------------------------------------------
+# ============================================================
 # CUSTOM CSS
-# ---------------------------------------------------------
+# ============================================================
+
 st.markdown("""
 <style>
     .main {
@@ -36,6 +39,14 @@ st.markdown("""
         margin-bottom: 25px;
     }
 
+    .section-title {
+        font-size: 23px;
+        font-weight: 600;
+        color: #111827;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+
     div[data-testid="stMetric"] {
         background-color: white;
         border-radius: 12px;
@@ -43,18 +54,19 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
 
-    .section-title {
-        font-size: 23px;
-        font-weight: 600;
-        color: #111827;
-        margin-top: 20px;
+    .info-box {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
+# ============================================================
 # TITLE
-# ---------------------------------------------------------
+# ============================================================
+
 st.markdown(
     '<div class="dashboard-title">💳 Digital Payment Transaction Trends Dashboard</div>',
     unsafe_allow_html=True
@@ -67,22 +79,31 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---------------------------------------------------------
+# ============================================================
 # LOAD DATA
-# ---------------------------------------------------------
+# IMPORTANT:
+# Keep upi_transactions_2024_cleaned.csv.gz in the same
+# GitHub folder as app.py
+# ============================================================
+
 @st.cache_data
 def load_data():
 
-    file_path = "upi_transactions_2024_cleaned.csv"
+    file_path = "upi_transactions_2024_cleaned.csv.gz"
 
-    df = pd.read_csv(file_path, on_bad_lines="skip")
+    df = pd.read_csv(
+        file_path,
+        compression="gzip",
+        low_memory=False
+    )
 
-    # Convert columns
+    # Convert date/time
     df["timestamp"] = pd.to_datetime(
         df["timestamp"],
         errors="coerce"
     )
 
+    # Numeric columns
     df["amount_inr"] = pd.to_numeric(
         df["amount_inr"],
         errors="coerce"
@@ -103,11 +124,31 @@ def load_data():
         errors="coerce"
     ).fillna(0)
 
-    # Clean string columns
-    for col in df.select_dtypes(include="object").columns:
-        df[col] = df[col].astype(str).str.strip().str.lower()
+    # Clean text columns
+    text_columns = [
+        "transaction_type",
+        "merchant_category",
+        "transaction_status",
+        "sender_age_group",
+        "receiver_age_group",
+        "sender_state",
+        "sender_bank",
+        "receiver_bank",
+        "device_type",
+        "network_type",
+        "day_of_week"
+    ]
 
-    # Remove invalid critical rows
+    for col in text_columns:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
+
+    # Remove invalid rows
     df.dropna(
         subset=[
             "timestamp",
@@ -125,62 +166,100 @@ try:
 
 except FileNotFoundError:
     st.error(
-        "CSV file not found. Please keep "
-        "'upi_transactions_2024_cleaned.csv' "
-        "in the same folder as app.py."
+        "Dataset not found. Make sure "
+        "'upi_transactions_2024_cleaned.csv.gz' "
+        "is in the same GitHub repository folder as app.py."
     )
     st.stop()
 
-# ---------------------------------------------------------
-# SIDEBAR FILTERS
-# ---------------------------------------------------------
-st.sidebar.header("🔎 Dashboard Filters")
+except Exception as e:
+    st.error(f"Unable to load dataset: {e}")
+    st.stop()
 
-# Transaction type
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+st.sidebar.title("🔎 Dashboard Filters")
+
+st.sidebar.write(
+    "Use the filters below to interact with the dashboard."
+)
+
+# ------------------------------------------------------------
+# Transaction Type
+# ------------------------------------------------------------
+
 transaction_types = sorted(
     df["transaction_type"].dropna().unique()
 )
 
 selected_transaction_types = st.sidebar.multiselect(
     "Transaction Type",
-    transaction_types,
+    options=transaction_types,
     default=transaction_types
 )
 
-# States
+# ------------------------------------------------------------
+# Sender State
+# ------------------------------------------------------------
+
 states = sorted(
     df["sender_state"].dropna().unique()
 )
 
 selected_states = st.sidebar.multiselect(
     "Sender State",
-    states,
+    options=states,
     default=states
 )
 
-# Status
+# ------------------------------------------------------------
+# Transaction Status
+# ------------------------------------------------------------
+
 statuses = sorted(
     df["transaction_status"].dropna().unique()
 )
 
 selected_statuses = st.sidebar.multiselect(
     "Transaction Status",
-    statuses,
+    options=statuses,
     default=statuses
 )
 
-# Device
+# ------------------------------------------------------------
+# Device Type
+# ------------------------------------------------------------
+
 devices = sorted(
     df["device_type"].dropna().unique()
 )
 
 selected_devices = st.sidebar.multiselect(
     "Device Type",
-    devices,
+    options=devices,
     default=devices
 )
 
-# Date range
+# ------------------------------------------------------------
+# Network Type
+# ------------------------------------------------------------
+
+networks = sorted(
+    df["network_type"].dropna().unique()
+)
+
+selected_networks = st.sidebar.multiselect(
+    "Network Type",
+    options=networks,
+    default=networks
+)
+
+# ------------------------------------------------------------
+# Date Range
+# ------------------------------------------------------------
+
 min_date = df["timestamp"].min().date()
 max_date = df["timestamp"].max().date()
 
@@ -191,9 +270,10 @@ selected_dates = st.sidebar.date_input(
     max_value=max_date
 )
 
-# ---------------------------------------------------------
+# ============================================================
 # APPLY FILTERS
-# ---------------------------------------------------------
+# ============================================================
+
 filtered_df = df.copy()
 
 if selected_transaction_types:
@@ -224,7 +304,15 @@ if selected_devices:
         )
     ]
 
-if len(selected_dates) == 2:
+if selected_networks:
+    filtered_df = filtered_df[
+        filtered_df["network_type"].isin(
+            selected_networks
+        )
+    ]
+
+if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
+
     start_date, end_date = selected_dates
 
     filtered_df = filtered_df[
@@ -233,16 +321,23 @@ if len(selected_dates) == 2:
         (filtered_df["timestamp"].dt.date <= end_date)
     ]
 
-# ---------------------------------------------------------
-# CHECK EMPTY DATA
-# ---------------------------------------------------------
+# ============================================================
+# EMPTY DATA CHECK
+# ============================================================
+
 if filtered_df.empty:
-    st.warning("No transactions match the selected filters.")
+
+    st.warning(
+        "No transactions match the selected filters. "
+        "Please change the filters."
+    )
+
     st.stop()
 
-# ---------------------------------------------------------
+# ============================================================
 # KPI CALCULATIONS
-# ---------------------------------------------------------
+# ============================================================
+
 total_transactions = len(filtered_df)
 
 total_amount = filtered_df["amount_inr"].sum()
@@ -254,15 +349,15 @@ successful_transactions = (
     .sum()
 )
 
+failed_transactions = (
+    total_transactions -
+    successful_transactions
+)
+
 success_rate = (
     successful_transactions /
     total_transactions *
     100
-)
-
-failed_transactions = (
-    total_transactions -
-    successful_transactions
 )
 
 failure_rate = (
@@ -273,18 +368,24 @@ failure_rate = (
 
 fraud_transactions = (
     filtered_df["fraud_flag"]
-    .fillna(0)
     .astype(int)
     .sum()
+)
+
+fraud_rate = (
+    fraud_transactions /
+    total_transactions *
+    100
 )
 
 average_transaction = (
     filtered_df["amount_inr"].mean()
 )
 
-# ---------------------------------------------------------
+# ============================================================
 # KPI CARDS
-# ---------------------------------------------------------
+# ============================================================
+
 st.markdown(
     '<div class="section-title">📊 Key Performance Indicators</div>',
     unsafe_allow_html=True
@@ -322,11 +423,38 @@ with col5:
         f"{fraud_transactions:,}"
     )
 
-# ---------------------------------------------------------
-# SUCCESS RATE BY PAYMENT METHOD
-# ---------------------------------------------------------
+# ============================================================
+# ADDITIONAL KPI ROW
+# ============================================================
+
+col6, col7, col8 = st.columns(3)
+
+with col6:
+    st.metric(
+        "Average Transaction",
+        f"₹{average_transaction:,.2f}"
+    )
+
+with col7:
+    st.metric(
+        "Failed Transactions",
+        f"{failed_transactions:,}"
+    )
+
+with col8:
+    st.metric(
+        "Fraud Rate",
+        f"{fraud_rate:.2f}%"
+    )
+
+# ============================================================
+# 1. SUCCESS RATE BY PAYMENT METHOD
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">1. Success Rate by Payment Method</div>',
+    '<div class="section-title">'
+    '1. Success Rate by Payment Method'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -335,15 +463,13 @@ success_rate_df = (
     .groupby("transaction_type")["transaction_status"]
     .apply(
         lambda x:
-        np.mean(
-            x.str.lower() == "success"
-        ) * 100
+        (x.str.lower() == "success").mean() * 100
     )
     .reset_index(
-        name="success_rate_%"
+        name="success_rate"
     )
     .sort_values(
-        "success_rate_%",
+        "success_rate",
         ascending=False
     )
 )
@@ -351,32 +477,35 @@ success_rate_df = (
 fig1 = px.bar(
     success_rate_df,
     x="transaction_type",
-    y="success_rate_%",
-    text_auto=".2f",
+    y="success_rate",
+    text="success_rate",
     title="Success Rate by Payment Method",
     labels={
         "transaction_type": "Payment Method",
-        "success_rate_%": "Success Rate (%)"
+        "success_rate": "Success Rate (%)"
     }
 )
 
-fig1.update_layout(
-    yaxis_range=[
-        max(0, success_rate_df["success_rate_%"].min() - 2),
-        100
-    ]
+fig1.update_traces(
+    texttemplate="%{text:.2f}%",
+    textposition="outside"
 )
+
+fig1.update_yaxes(range=[0, 100])
 
 st.plotly_chart(
     fig1,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# FAILURE RATE BY PAYMENT METHOD
-# ---------------------------------------------------------
+# ============================================================
+# 2. FAILURE RATE BY PAYMENT METHOD
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">2. Failure Rate by Transaction Method</div>',
+    '<div class="section-title">'
+    '2. Failure Rate by Transaction Method'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -385,15 +514,13 @@ failure_rate_df = (
     .groupby("transaction_type")["transaction_status"]
     .apply(
         lambda x:
-        np.mean(
-            x.str.lower() != "success"
-        ) * 100
+        (x.str.lower() != "success").mean() * 100
     )
     .reset_index(
-        name="failure_rate_%"
+        name="failure_rate"
     )
     .sort_values(
-        "failure_rate_%",
+        "failure_rate",
         ascending=False
     )
 )
@@ -401,13 +528,18 @@ failure_rate_df = (
 fig2 = px.bar(
     failure_rate_df,
     x="transaction_type",
-    y="failure_rate_%",
-    text_auto=".2f",
-    title="Failure Rate by Transaction Method (%)",
+    y="failure_rate",
+    text="failure_rate",
+    title="Failure Rate by Transaction Method",
     labels={
         "transaction_type": "Transaction Method",
-        "failure_rate_%": "Failure Rate (%)"
+        "failure_rate": "Failure Rate (%)"
     }
+)
+
+fig2.update_traces(
+    texttemplate="%{text:.2f}%",
+    textposition="outside"
 )
 
 st.plotly_chart(
@@ -415,11 +547,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TRANSACTIONS BY AGE GROUP
-# ---------------------------------------------------------
+# ============================================================
+# 3. TRANSACTIONS BY AGE GROUP
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">3. Transactions by Sender Age Group</div>',
+    '<div class="section-title">'
+    '3. Transactions by Sender Age Group'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -431,18 +566,18 @@ age_group_counts = (
 
 age_group_counts.columns = [
     "age_group",
-    "txn_count"
+    "transaction_count"
 ]
 
 fig3 = px.bar(
     age_group_counts,
     x="age_group",
-    y="txn_count",
-    text_auto=True,
+    y="transaction_count",
+    text="transaction_count",
     title="Transaction Count by Sender Age Group",
     labels={
         "age_group": "Age Group",
-        "txn_count": "Number of Transactions"
+        "transaction_count": "Transactions"
     }
 )
 
@@ -451,11 +586,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TRANSACTION TYPE DISTRIBUTION
-# ---------------------------------------------------------
+# ============================================================
+# 4. TRANSACTION TYPE DISTRIBUTION
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">4. Transaction Type Distribution</div>',
+    '<div class="section-title">'
+    '4. Transaction Type Distribution'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -483,11 +621,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TRANSACTIONS BY MERCHANT CATEGORY
-# ---------------------------------------------------------
+# ============================================================
+# 5. MERCHANT CATEGORY
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">5. Transactions by Merchant Category</div>',
+    '<div class="section-title">'
+    '5. Transactions by Merchant Category'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -507,7 +648,7 @@ fig5 = px.bar(
     x="count",
     y="merchant_category",
     orientation="h",
-    text_auto=True,
+    text="count",
     title="Top Merchant Categories",
     labels={
         "merchant_category": "Merchant Category",
@@ -520,11 +661,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TRANSACTIONS BY STATE
-# ---------------------------------------------------------
+# ============================================================
+# 6. TRANSACTIONS BY STATE
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">6. Transactions by Sender State</div>',
+    '<div class="section-title">'
+    '6. Transactions by Sender State'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -543,7 +687,7 @@ fig6 = px.bar(
     state_df.head(10),
     x="sender_state",
     y="count",
-    text_auto=True,
+    text="count",
     title="Top Sender States by Transaction Volume",
     labels={
         "sender_state": "State",
@@ -551,16 +695,23 @@ fig6 = px.bar(
     }
 )
 
+fig6.update_layout(
+    xaxis_tickangle=-45
+)
+
 st.plotly_chart(
     fig6,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TRANSACTIONS BY DEVICE TYPE
-# ---------------------------------------------------------
+# ============================================================
+# 7. DEVICE TYPE
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">7. Device Type Analysis</div>',
+    '<div class="section-title">'
+    '7. Transactions by Device Type'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -588,11 +739,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# NETWORK TYPE
-# ---------------------------------------------------------
+# ============================================================
+# 8. NETWORK TYPE
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">8. Network Type Analysis</div>',
+    '<div class="section-title">'
+    '8. Transactions by Network Type'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -611,7 +765,7 @@ fig8 = px.bar(
     network_df,
     x="network_type",
     y="count",
-    text_auto=True,
+    text="count",
     title="Transactions by Network Type",
     labels={
         "network_type": "Network Type",
@@ -624,11 +778,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# HOURLY TRANSACTION TREND
-# ---------------------------------------------------------
+# ============================================================
+# 9. HOURLY TRANSACTION TREND
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">9. Transaction Activity by Hour</div>',
+    '<div class="section-title">'
+    '9. Transaction Activity by Hour'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -657,7 +814,7 @@ fig9 = px.line(
     markers=True,
     title="Transaction Activity by Hour of Day",
     labels={
-        "hour_of_day": "Hour",
+        "hour_of_day": "Hour of Day",
         "transaction_count": "Transactions"
     }
 )
@@ -667,11 +824,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# DAY OF WEEK ANALYSIS
-# ---------------------------------------------------------
+# ============================================================
+# 10. DAY OF WEEK
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">10. Transactions by Day of Week</div>',
+    '<div class="section-title">'
+    '10. Transactions by Day of Week'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -702,7 +862,7 @@ fig10 = px.bar(
     day_df,
     x="day_of_week",
     y="count",
-    text_auto=True,
+    text="count",
     title="Transaction Volume by Day of Week",
     labels={
         "day_of_week": "Day",
@@ -715,11 +875,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# MONTHLY TRANSACTION TREND
-# ---------------------------------------------------------
+# ============================================================
+# 11. MONTHLY TRANSACTION TREND
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">11. Monthly Transaction Trend</div>',
+    '<div class="section-title">'
+    '11. Monthly Transaction Trend'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -737,8 +900,7 @@ monthly_df = (
 )
 
 monthly_df["month"] = (
-    monthly_df["month"]
-    .astype(str)
+    monthly_df["month"].astype(str)
 )
 
 fig11 = px.line(
@@ -758,11 +920,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TRANSACTION VALUE TREND
-# ---------------------------------------------------------
+# ============================================================
+# 12. MONTHLY TRANSACTION VALUE
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">12. Monthly Transaction Value</div>',
+    '<div class="section-title">'
+    '12. Monthly Transaction Value'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -770,7 +935,7 @@ fig12 = px.bar(
     monthly_df,
     x="month",
     y="total_value",
-    text_auto=".2s",
+    text="total_value",
     title="Monthly Transaction Value",
     labels={
         "month": "Month",
@@ -778,16 +943,24 @@ fig12 = px.bar(
     }
 )
 
+fig12.update_traces(
+    texttemplate="₹%{text:,.0f}",
+    textposition="outside"
+)
+
 st.plotly_chart(
     fig12,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# FRAUD ANALYSIS
-# ---------------------------------------------------------
+# ============================================================
+# 13. FRAUD ANALYSIS
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">13. Fraud Analysis</div>',
+    '<div class="section-title">'
+    '13. Fraud Analysis'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -822,11 +995,14 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# TOP BANKS
-# ---------------------------------------------------------
+# ============================================================
+# 14. SENDER BANK ANALYSIS
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">14. Sender Bank Analysis</div>',
+    '<div class="section-title">'
+    '14. Sender Bank Analysis'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -845,7 +1021,7 @@ fig14 = px.bar(
     bank_df.head(10),
     x="sender_bank",
     y="count",
-    text_auto=True,
+    text="count",
     title="Top Sender Banks",
     labels={
         "sender_bank": "Bank",
@@ -858,11 +1034,612 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# DATA TABLE
-# ---------------------------------------------------------
+# ============================================================
+# 15. RECEIVER AGE GROUP
+# ============================================================
+
 st.markdown(
-    '<div class="section-title">📋 Transaction Data</div>',
+    '<div class="section-title">'
+    '15. Transactions by Receiver Age Group'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+receiver_age_df = (
+    filtered_df["receiver_age_group"]
+    .value_counts()
+    .reset_index()
+)
+
+receiver_age_df.columns = [
+    "receiver_age_group",
+    "count"
+]
+
+fig15 = px.bar(
+    receiver_age_df,
+    x="receiver_age_group",
+    y="count",
+    text="count",
+    title="Transactions by Receiver Age Group",
+    labels={
+        "receiver_age_group": "Receiver Age Group",
+        "count": "Transactions"
+    }
+)
+
+st.plotly_chart(
+    fig15,
+    use_container_width=True
+)
+
+# ============================================================
+# 16. TOP RECEIVER BANKS
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '16. Receiver Bank Analysis'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+receiver_bank_df = (
+    filtered_df["receiver_bank"]
+    .value_counts()
+    .reset_index()
+)
+
+receiver_bank_df.columns = [
+    "receiver_bank",
+    "count"
+]
+
+fig16 = px.bar(
+    receiver_bank_df.head(10),
+    x="receiver_bank",
+    y="count",
+    text="count",
+    title="Top Receiver Banks",
+    labels={
+        "receiver_bank": "Receiver Bank",
+        "count": "Transactions"
+    }
+)
+
+st.plotly_chart(
+    fig16,
+    use_container_width=True
+)
+
+# ============================================================
+# 17. TRANSACTION VALUE BY STATE
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '17. Transaction Value by State'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+state_value_df = (
+    filtered_df
+    .groupby("sender_state")["amount_inr"]
+    .sum()
+    .reset_index()
+    .sort_values(
+        "amount_inr",
+        ascending=False
+    )
+)
+
+fig17 = px.bar(
+    state_value_df.head(10),
+    x="sender_state",
+    y="amount_inr",
+    text="amount_inr",
+    title="Top States by Transaction Value",
+    labels={
+        "sender_state": "State",
+        "amount_inr": "Transaction Value (₹)"
+    }
+)
+
+fig17.update_layout(
+    xaxis_tickangle=-45
+)
+
+fig17.update_traces(
+    texttemplate="₹%{text:,.0f}",
+    textposition="outside"
+)
+
+st.plotly_chart(
+    fig17,
+    use_container_width=True
+)
+
+# ============================================================
+# 18. SUCCESS RATE BY STATE
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '18. Success Rate by State'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+state_success_df = (
+    filtered_df
+    .groupby("sender_state")["transaction_status"]
+    .apply(
+        lambda x:
+        (x.str.lower() == "success").mean() * 100
+    )
+    .reset_index(
+        name="success_rate"
+    )
+    .sort_values(
+        "success_rate",
+        ascending=False
+    )
+)
+
+fig18 = px.bar(
+    state_success_df,
+    x="sender_state",
+    y="success_rate",
+    text="success_rate",
+    title="Success Rate by Sender State",
+    labels={
+        "sender_state": "State",
+        "success_rate": "Success Rate (%)"
+    }
+)
+
+fig18.update_traces(
+    texttemplate="%{text:.2f}%",
+    textposition="outside"
+)
+
+st.plotly_chart(
+    fig18,
+    use_container_width=True
+)
+
+# ============================================================
+# 19. FRAUD RATE BY STATE
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '19. Fraud Rate by State'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+state_fraud_df = (
+    filtered_df
+    .groupby("sender_state")["fraud_flag"]
+    .mean()
+    .mul(100)
+    .reset_index(
+        name="fraud_rate"
+    )
+    .sort_values(
+        "fraud_rate",
+        ascending=False
+    )
+)
+
+fig19 = px.bar(
+    state_fraud_df,
+    x="sender_state",
+    y="fraud_rate",
+    text="fraud_rate",
+    title="Fraud Rate by Sender State",
+    labels={
+        "sender_state": "State",
+        "fraud_rate": "Fraud Rate (%)"
+    }
+)
+
+fig19.update_traces(
+    texttemplate="%{text:.2f}%",
+    textposition="outside"
+)
+
+fig19.update_layout(
+    xaxis_tickangle=-45
+)
+
+st.plotly_chart(
+    fig19,
+    use_container_width=True
+)
+
+# ============================================================
+# 20. WEEKEND VS WEEKDAY
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '20. Weekend vs Weekday Transactions'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+weekend_df = (
+    filtered_df["is_weekend"]
+    .map({
+        0: "Weekday",
+        1: "Weekend"
+    })
+    .value_counts()
+    .reset_index()
+)
+
+weekend_df.columns = [
+    "day_type",
+    "count"
+]
+
+fig20 = px.pie(
+    weekend_df,
+    names="day_type",
+    values="count",
+    hole=0.4,
+    title="Weekday vs Weekend Transactions"
+)
+
+st.plotly_chart(
+    fig20,
+    use_container_width=True
+)
+
+# ============================================================
+# 21. AVERAGE TRANSACTIONS PER DAY
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '21. Daily Transaction Activity'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+daily_df = (
+    filtered_df
+    .assign(
+        date=filtered_df["timestamp"].dt.date
+    )
+    .groupby("date")
+    .size()
+    .reset_index(
+        name="transactions"
+    )
+)
+
+average_daily_transactions = (
+    daily_df["transactions"].mean()
+)
+
+st.info(
+    f"Average transactions per day: "
+    f"{average_daily_transactions:,.2f}"
+)
+
+fig21 = px.line(
+    daily_df,
+    x="date",
+    y="transactions",
+    title="Daily Transaction Volume",
+    labels={
+        "date": "Date",
+        "transactions": "Transactions"
+    }
+)
+
+st.plotly_chart(
+    fig21,
+    use_container_width=True
+)
+
+# ============================================================
+# 22. TOP TRANSACTION HOURS
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '22. Transaction Volume by Hour'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+hour_summary = (
+    filtered_df["hour_of_day"]
+    .value_counts()
+    .sort_index()
+    .reset_index()
+)
+
+hour_summary.columns = [
+    "hour",
+    "transactions"
+]
+
+busiest_hour = (
+    hour_summary.loc[
+        hour_summary["transactions"].idxmax(),
+        "hour"
+    ]
+)
+
+st.info(
+    f"Busiest transaction hour: {int(busiest_hour):02d}:00"
+)
+
+# ============================================================
+# 23. MOST COMMON TRANSACTION DAY
+# ============================================================
+
+day_counts = (
+    filtered_df["day_of_week"]
+    .value_counts()
+)
+
+if not day_counts.empty:
+    most_common_day = day_counts.idxmax()
+
+    st.info(
+        f"Most common transaction day: "
+        f"{most_common_day.title()}"
+    )
+
+# ============================================================
+# 24. MOST COMMON RECEIVER AGE GROUP
+# ============================================================
+
+receiver_age_counts = (
+    filtered_df["receiver_age_group"]
+    .value_counts()
+)
+
+if not receiver_age_counts.empty:
+
+    common_receiver_age = (
+        receiver_age_counts.idxmax()
+    )
+
+    st.info(
+        f"Most common receiver age group: "
+        f"{common_receiver_age}"
+    )
+
+# ============================================================
+# 25. 5G TRANSACTIONS BY STATE
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '25. 5G Transactions by State'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+five_g_df = filtered_df[
+    filtered_df["network_type"].str.lower() == "5g"
+]
+
+if not five_g_df.empty:
+
+    five_g_state_df = (
+        five_g_df["sender_state"]
+        .value_counts()
+        .reset_index()
+    )
+
+    five_g_state_df.columns = [
+        "sender_state",
+        "count"
+    ]
+
+    fig25 = px.bar(
+        five_g_state_df.head(10),
+        x="sender_state",
+        y="count",
+        text="count",
+        title="Top States for 5G Transactions",
+        labels={
+            "sender_state": "State",
+            "count": "5G Transactions"
+        }
+    )
+
+    fig25.update_layout(
+        xaxis_tickangle=-45
+    )
+
+    st.plotly_chart(
+        fig25,
+        use_container_width=True
+    )
+
+else:
+    st.info("No 5G transactions available for the selected filters.")
+
+# ============================================================
+# 26. PAYMENT METHOD VS DEVICE
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '26. Payment Method vs Device Type'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+method_device_df = (
+    filtered_df
+    .groupby(
+        ["transaction_type", "device_type"]
+    )
+    .size()
+    .reset_index(
+        name="transactions"
+    )
+)
+
+fig26 = px.bar(
+    method_device_df,
+    x="transaction_type",
+    y="transactions",
+    color="device_type",
+    barmode="group",
+    title="Payment Method by Device Type",
+    labels={
+        "transaction_type": "Payment Method",
+        "transactions": "Transactions",
+        "device_type": "Device"
+    }
+)
+
+st.plotly_chart(
+    fig26,
+    use_container_width=True
+)
+
+# ============================================================
+# 27. PAYMENT METHOD VS NETWORK
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '27. Payment Method vs Network Type'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+method_network_df = (
+    filtered_df
+    .groupby(
+        ["transaction_type", "network_type"]
+    )
+    .size()
+    .reset_index(
+        name="transactions"
+    )
+)
+
+fig27 = px.bar(
+    method_network_df,
+    x="transaction_type",
+    y="transactions",
+    color="network_type",
+    barmode="group",
+    title="Payment Method by Network Type",
+    labels={
+        "transaction_type": "Payment Method",
+        "transactions": "Transactions",
+        "network_type": "Network"
+    }
+)
+
+st.plotly_chart(
+    fig27,
+    use_container_width=True
+)
+
+# ============================================================
+# 28. TRANSACTION AMOUNT DISTRIBUTION
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '28. Transaction Amount Distribution'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+fig28 = px.histogram(
+    filtered_df,
+    x="amount_inr",
+    nbins=50,
+    title="Distribution of Transaction Amounts",
+    labels={
+        "amount_inr": "Amount (₹)",
+        "count": "Transactions"
+    }
+)
+
+st.plotly_chart(
+    fig28,
+    use_container_width=True
+)
+
+# ============================================================
+# 29. TOP REVENUE-GENERATING STATES
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '29. Revenue-Generating States'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+revenue_state_df = (
+    filtered_df
+    .groupby("sender_state")["amount_inr"]
+    .sum()
+    .reset_index()
+    .sort_values(
+        "amount_inr",
+        ascending=False
+    )
+)
+
+if not revenue_state_df.empty:
+
+    highest_revenue_state = (
+        revenue_state_df.iloc[0]["sender_state"]
+    )
+
+    st.info(
+        f"Highest transaction-value state: "
+        f"{highest_revenue_state.title()}"
+    )
+
+# ============================================================
+# 30. LOWEST FRAUD RATE STATE
+# ============================================================
+
+if not state_fraud_df.empty:
+
+    lowest_fraud_state = (
+        state_fraud_df.iloc[-1]["sender_state"]
+    )
+
+    lowest_fraud_rate = (
+        state_fraud_df.iloc[-1]["fraud_rate"]
+    )
+
+    st.info(
+        f"Lowest fraud-rate state: "
+        f"{lowest_fraud_state.title()} "
+        f"({lowest_fraud_rate:.2f}%)"
+    )
+
+# ============================================================
+# FILTERED DATA TABLE
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">'
+    '📋 Filtered Transaction Data'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -872,9 +1649,10 @@ st.dataframe(
     height=400
 )
 
-# ---------------------------------------------------------
+# ============================================================
 # DOWNLOAD FILTERED DATA
-# ---------------------------------------------------------
+# ============================================================
+
 csv_data = filtered_df.to_csv(
     index=False
 ).encode("utf-8")
@@ -886,17 +1664,18 @@ st.download_button(
     mime="text/csv"
 )
 
-# ---------------------------------------------------------
+# ============================================================
 # FOOTER
-# ---------------------------------------------------------
+# ============================================================
+
 st.markdown("---")
 
 st.markdown(
     """
-    <div style='text-align:center; color:#6b7280;'>
+    <div style="text-align:center; color:#6b7280;">
         <b>Digital Payment Transaction Trends Dashboard</b><br>
-        Data Analysis using Python, Pandas, Plotly and Streamlit<br>
-        Dataset: UPI Transactions 2024
+        UPI Transaction Analysis – 2024<br>
+        Developed using Python, Pandas, Plotly and Streamlit
     </div>
     """,
     unsafe_allow_html=True
