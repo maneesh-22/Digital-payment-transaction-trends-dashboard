@@ -1,1 +1,1 @@
-# Digital-payment-transaction-trends-dashboard
+ streamlit run app.py
