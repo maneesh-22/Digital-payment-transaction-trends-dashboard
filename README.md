@@ -1,2 +1,2 @@
-https://digital-payment-transaction-trends-dashboard.streamlit.app
+https://digital-payment-transaction-trends-dashboard.streamlit.app/
 
