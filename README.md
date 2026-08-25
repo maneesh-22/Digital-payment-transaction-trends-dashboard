@@ -1,1 +1,2 @@
- streamlit run app.py
+https://your-app-name.streamlit.app/
+
